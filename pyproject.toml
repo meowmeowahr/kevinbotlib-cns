@@ -1,0 +1,11 @@
+[project]
+name = "kevinbotlib-cns"
+version = "0.1.0"
+description = "KevinbotLib Communication and Networking Service"
+requires-python = ">=3.10"
+dependencies = [
+    "websockets~=15.0.1",
+    "fastapi~=0.122.0",
+    "uvicorn~=0.38.0",
+    "loguru~=0.7.3",
+]
