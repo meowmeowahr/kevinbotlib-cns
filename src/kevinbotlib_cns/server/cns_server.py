@@ -359,6 +359,17 @@ class CNSServer:
                                 logger.debug(
                                     f"{client_id} subscribed to topic: {data['topic']}"
                                 )
+                            case "tcnt":
+                                await websocket.send_json(
+                                    {
+                                        "action": "tcnt",
+                                        "count": len(self.database)
+                                    }
+                                )
+
+                                logger.debug(
+                                    f"{client_id} request for topic count: {len(self.database)}"
+                                )
 
                     except JSONDecodeError as e:
                         logger.warning(f"Client {client_id} received invalid JSON: {e}")
