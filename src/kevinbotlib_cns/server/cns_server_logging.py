@@ -5,13 +5,10 @@ from loguru import logger
 
 class InterceptHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
-        try:
-            level = logger.level(record.levelname).name
-        except ValueError:
-            level = record.levelno
+        level = logger.level(record.levelname).name
 
-        frame, depth = logging.currentframe(), 6
-        while frame.f_code.co_filename == logging.__file__:
+        frame, depth = logging.currentframe(), 1
+        while frame.f_code.co_filename in [logging.__file__, __file__]:
             frame = frame.f_back
             depth += 1
 

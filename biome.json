@@ -1,7 +1,10 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
 	"files": {
-		"includes": ["**", "!.venv/"]
+		"includes": [
+			"src/kevinbotlib_cns/server/dashboard_template.html",
+			"!.venv/"
+		]
 	},
 	"html": {
 		"parser": {

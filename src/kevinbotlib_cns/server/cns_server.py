@@ -5,7 +5,10 @@ from json import JSONDecodeError
 from pathlib import Path
 
 from fastapi import FastAPI as _FastAPI
-from fastapi.responses import HTMLResponse as _HTMLResponse, JSONResponse as _JSONResponse
+from fastapi.responses import (
+    HTMLResponse as _HTMLResponse,
+    JSONResponse as _JSONResponse,
+)
 from fastapi.websockets import WebSocket as _WebSocket
 from loguru import logger
 from uvicorn import Config as _Config, Server as _Server
@@ -13,6 +16,7 @@ import threading
 import asyncio
 
 from kevinbotlib_cns.server.cns_server_logging import init_logging
+from kevinbotlib_cns.types import JSONType
 
 
 @dataclasses.dataclass
@@ -38,9 +42,8 @@ class CNSServer:
     def __init__(self):
         self.clients: dict[uuid.UUID, ClientInfo] = {}
         self.subscriptions: dict[str, set[ClientInfo]] = {}
-        self.database: dict[str, str] = {}
+        self.database: dict[str, JSONType] = {}
         self.start_time = datetime.datetime.now(datetime.timezone.utc)
-
         self.app: _FastAPI | None = None
 
         self._server: _Server | None = None
@@ -361,10 +364,7 @@ class CNSServer:
                                 )
                             case "tcnt":
                                 await websocket.send_json(
-                                    {
-                                        "action": "tcnt",
-                                        "count": len(self.database)
-                                    }
+                                    {"action": "tcnt", "count": len(self.database)}
                                 )
 
                                 logger.debug(
@@ -374,7 +374,7 @@ class CNSServer:
                                 await websocket.send_json(
                                     {
                                         "action": "topics",
-                                        "topics": list(self.database.keys())
+                                        "topics": list(self.database.keys()),
                                     }
                                 )
 
@@ -418,6 +418,7 @@ class CNSServer:
                 port=port,
                 loop="asyncio",
                 lifespan="auto",
+                ws_max_size=50 * 1024 * 1024,  # 50MB
             )
 
             self._server = _Server(config)
@@ -442,10 +443,11 @@ class CNSServer:
             return
 
         # Tell uvicorn to shut down
+        # Tell uvicorn to shut down
         self._server.should_exit = True
-        def stop_loop(_: object): # maybe a bug in PyCharm's linter?
-            self._loop.stop()
-        self._loop.call_soon_threadsafe(stop_loop, None)
+        # We don't force stop the loop, we let uvicorn handle it.
+        # But we need to make sure the loop wakes up if it's idle?
+        # Uvicorn checks should_exit periodically.
 
         if self._thread:
             self._thread.join(timeout=2.0)
