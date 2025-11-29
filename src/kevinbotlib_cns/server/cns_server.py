@@ -258,7 +258,7 @@ class CNSServer:
             client_id: str | None = websocket.headers.get("client-id", None)
             if not client_id:
                 logger.warning(
-                    "Client did not provide client id (Client-ID), connection ending."
+                    "Client did not provide client id (Client-ID), closing connection."
                 )
                 await websocket.close(
                     1002, "The client did not provide a valid client id (Client-ID)"
@@ -369,6 +369,17 @@ class CNSServer:
 
                                 logger.debug(
                                     f"{client_id} request for topic count: {len(self.database)}"
+                                )
+                            case "topics":
+                                await websocket.send_json(
+                                    {
+                                        "action": "topics",
+                                        "topics": list(self.database.keys())
+                                    }
+                                )
+
+                                logger.debug(
+                                    f"{client_id} request for topics list: {list(self.database.keys())}"
                                 )
 
                     except JSONDecodeError as e:
