@@ -290,6 +290,20 @@ class CNSServer:
                                         ).isoformat(),
                                     }
                                 )
+                            case "flush":
+                                self.database.clear()
+                                await websocket.send_json(
+                                    {
+                                        "action": "flush",
+                                        "ts": datetime.datetime.now(
+                                            tz=datetime.timezone.utc
+                                        ).isoformat(),
+                                    }
+                                )
+
+                                logger.info(
+                                    f"{client_id} flushed the database"
+                                )
                             case "del":
                                 if "topic" not in data:
                                     await websocket.send_json(

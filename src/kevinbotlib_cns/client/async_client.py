@@ -114,6 +114,9 @@ class CNSAsyncClient:
         elif action == "topics":
             future_key = "topics"
             result = data.get("topics")
+        elif action == "flush":
+            future_key = "flush"
+            result = data.get("ts")
         elif "error" in data:
             logger.error(f"CNS Error: {data['error']}")
             return
@@ -151,11 +154,29 @@ class CNSAsyncClient:
         time_end = time.monotonic()
         return time_end - time_start
 
+    async def flushdb(self) -> str | None:
+        """
+        Wipe all topics on the CNS Server's database.
+
+        **WARNING**: This is a destructive operation.
+
+        :return: Server-reported timestamp. None if not connected.
+        """
+        if not self.websocket:
+            logger.error(f"Couldn't flush database, CNS is not connected")
+            return None
+
+        time_start = time.monotonic()
+        await self.websocket.send(
+            json.dumps({"action": "flush"})
+        )
+        return await self._wait_for_response(f"flush")
+
     async def delete(self, topic: str) -> str | None:
         """
         Delete a topic in the CNs database.
         :param topic: Topic to delete
-        :return: Topic that was deleted
+        :return: Topic that was deleted. None if not connected.
         """
         if not self.websocket:
             logger.error(f"Couldn't delete {topic}, CNS is not connected")
@@ -166,12 +187,12 @@ class CNSAsyncClient:
         )
         return await self._wait_for_response(f"del:{topic}")
 
-    async def set(self, topic: str, data: JSONType) -> str:
+    async def set(self, topic: str, data: JSONType) -> str | None:
         """
         Set the value of a CNS topic.
         :param topic: Topic to set.
         :param data: Data to set.
-        :return: Server-reported timestamp
+        :return: Server-reported timestamp. None if not connected.
         """
         if not self.websocket:
             logger.error(f"Couldn't set {topic}, CNS is not connected")
@@ -186,7 +207,7 @@ class CNSAsyncClient:
         """
         Get a value on a specific CNS topic.
         :param topic: CNS topic to get from.
-        :return: Data from that topic
+        :return: Data from that topic. None if not connected or if the data is null..
         """
         if not self.websocket:
             logger.error(f"Couldn't get {topic}, CNS is not connected")
@@ -205,7 +226,8 @@ class CNSAsyncClient:
         :return:
         """
         if not self.websocket:
-            raise RuntimeError("Not connected")
+            logger.error(f"Couldn't subscribe to {topic}, CNS is not connected")
+            return
 
         if topic not in self._subscriptions:
             self._subscriptions[topic] = []
@@ -217,11 +239,12 @@ class CNSAsyncClient:
     async def topic_count(self) -> int:
         """
         Get the number of topics in the CNS' database.
-        :return: Topic count
+        :return: Topic count. 0 if not connected.
         """
 
         if not self.websocket:
-            raise RuntimeError("Not connected")
+            logger.error(f"Couldn't get topic count, CNS is not connected")
+            return 0
 
         await self.websocket.send(json.dumps({"action": "tcnt"}))
         return await self._wait_for_response("tcnt")
@@ -229,10 +252,11 @@ class CNSAsyncClient:
     async def get_topics(self) -> list[str]:
         """
         Get a list of all topics in the CNS' database.
-        :return: List of topics
+        :return: List of topics. Empty list if not connected.
         """
         if not self.websocket:
-            raise RuntimeError("Not connected")
+            logger.error(f"Couldn't get topic list, CNS is not connected")
+            return []
 
         await self.websocket.send(json.dumps({"action": "topics"}))
         return await self._wait_for_response("topics")

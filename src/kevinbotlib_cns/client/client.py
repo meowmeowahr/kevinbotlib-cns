@@ -59,6 +59,19 @@ class CNSClient:
         self._thread = None
         self._async_client = None
 
+    def flushdb(self) -> str:
+        """
+        Wipe all topics in the CNS database.
+
+        **WARNING**: This is a destructive operation.
+
+        :return: Server-reported timestamp
+        """
+        future = asyncio.run_coroutine_threadsafe(
+            self._async_client.flushdb(), self._loop
+        )
+        return future.result()
+
     def ping(self) -> float | None:
         """
         Ping the CNS server.
@@ -66,6 +79,17 @@ class CNSClient:
         """
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.ping(), self._loop
+        )
+        return future.result()
+
+    def delete(self, topic: str) -> str:
+        """
+        Delete a CNS topic from the database.
+        :param topic: Topic to delete.
+        :return: Server-reported timestamp
+        """
+        future = asyncio.run_coroutine_threadsafe(
+            self._async_client.delete(topic), self._loop
         )
         return future.result()
 
