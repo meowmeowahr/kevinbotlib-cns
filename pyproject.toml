@@ -8,6 +8,7 @@ dependencies = [
     "fastapi~=0.122.0",
     "uvicorn~=0.38.0",
     "loguru~=0.7.3",
+    "orjson~=3.11.4"
 ]
 
 [dependency-groups]

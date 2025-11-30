@@ -4,6 +4,7 @@ import uuid
 from json import JSONDecodeError
 from pathlib import Path
 
+import orjson
 from fastapi import FastAPI as _FastAPI
 from fastapi.responses import (
     HTMLResponse as _HTMLResponse,
@@ -278,7 +279,7 @@ class CNSServer:
             try:
                 while True:
                     try:
-                        data = await websocket.receive_json()
+                        data = orjson.loads(await websocket.receive_text())
 
                         match data.get("action"):
                             case "ping":

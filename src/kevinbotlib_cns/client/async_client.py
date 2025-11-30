@@ -3,6 +3,7 @@ import json
 import time
 from typing import Any, Awaitable, Callable, Optional, Coroutine
 
+import orjson
 import websockets
 from loguru import logger
 
@@ -59,7 +60,7 @@ class CNSAsyncClient:
         try:
             async for message in self.websocket:
                 try:
-                    data = json.loads(message)
+                    data = orjson.loads(message)
                     await self._handle_message(data)
                 except json.JSONDecodeError:
                     logger.warning(f"Received invalid JSON: {message}")
@@ -148,7 +149,7 @@ class CNSAsyncClient:
 
         time_start = time.monotonic()
         await self.websocket.send(
-            json.dumps({"action": "ping"})
+            orjson.dumps({"action": "ping"})
         )
         await self._wait_for_response(f"pong")
         time_end = time.monotonic()
@@ -168,7 +169,7 @@ class CNSAsyncClient:
 
         time_start = time.monotonic()
         await self.websocket.send(
-            json.dumps({"action": "flush"})
+            orjson.dumps({"action": "flush"})
         )
         return await self._wait_for_response(f"flush")
 
@@ -183,7 +184,7 @@ class CNSAsyncClient:
             return None
 
         await self.websocket.send(
-            json.dumps({"action": "del", "topic": topic})
+            orjson.dumps({"action": "del", "topic": topic})
         )
         return await self._wait_for_response(f"del:{topic}")
 
@@ -199,7 +200,7 @@ class CNSAsyncClient:
             return None
 
         await self.websocket.send(
-            json.dumps({"action": "set", "topic": topic, "data": data})
+            orjson.dumps({"action": "set", "topic": topic, "data": data}).decode("utf-8")
         )
         return await self._wait_for_response(f"set:{topic}")
 
