@@ -1,6 +1,7 @@
 import asyncio
 import json
-from typing import Any, Awaitable, Callable, Optional
+import time
+from typing import Any, Awaitable, Callable, Optional, Coroutine
 
 import websockets
 from loguru import logger
@@ -96,9 +97,16 @@ class CNSAsyncClient:
             topic = data.get("topic")
             future_key = f"set:{topic}"
             result = data.get("ts")
+        elif action == "del":
+            topic = data.get("topic")
+            future_key = f"del:{topic}"
+            result = data.get("ts")
         elif action == "sub":
             topic = data.get("topic")
             future_key = f"sub:{topic}"
+            result = data.get("ts")
+        elif action == "pong":
+            future_key = "pong"
             result = data.get("ts")
         elif action == "tcnt":
             future_key = "tcnt"
@@ -126,10 +134,48 @@ class CNSAsyncClient:
                 del self._pending_requests[key]
             raise TimeoutError(f"Timed out waiting for response to {key}")
 
-    async def set(self, topic: str, data: JSONType) -> str:
-        """Set a value for a topic."""
+    async def ping(self) -> float | None:
+        """
+        Ping the CNS Server
+        :return: Seconds to response
+        """
         if not self.websocket:
-            raise RuntimeError("Not connected")
+            logger.error(f"Couldn't ping, CNS is not connected")
+            return None
+
+        time_start = time.monotonic()
+        await self.websocket.send(
+            json.dumps({"action": "ping"})
+        )
+        await self._wait_for_response(f"pong")
+        time_end = time.monotonic()
+        return time_end - time_start
+
+    async def delete(self, topic: str) -> str | None:
+        """
+        Delete a topic in the CNs database.
+        :param topic: Topic to delete
+        :return: Topic that was deleted
+        """
+        if not self.websocket:
+            logger.error(f"Couldn't delete {topic}, CNS is not connected")
+            return None
+
+        await self.websocket.send(
+            json.dumps({"action": "del", "topic": topic})
+        )
+        return await self._wait_for_response(f"del:{topic}")
+
+    async def set(self, topic: str, data: JSONType) -> str:
+        """
+        Set the value of a CNS topic.
+        :param topic: Topic to set.
+        :param data: Data to set.
+        :return: Server-reported timestamp
+        """
+        if not self.websocket:
+            logger.error(f"Couldn't set {topic}, CNS is not connected")
+            return None
 
         await self.websocket.send(
             json.dumps({"action": "set", "topic": topic, "data": data})
@@ -143,7 +189,8 @@ class CNSAsyncClient:
         :return: Data from that topic
         """
         if not self.websocket:
-            raise RuntimeError("Not connected")
+            logger.error(f"Couldn't get {topic}, CNS is not connected")
+            return None
 
         await self.websocket.send(json.dumps({"action": "get", "topic": topic}))
         return await self._wait_for_response(f"get:{topic}")
@@ -182,7 +229,6 @@ class CNSAsyncClient:
     async def get_topics(self) -> list[str]:
         """
         Get a list of all topics in the CNS' database.
-
         :return: List of topics
         """
         if not self.websocket:

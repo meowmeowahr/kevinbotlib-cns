@@ -281,6 +281,48 @@ class CNSServer:
                         data = await websocket.receive_json()
 
                         match data.get("action"):
+                            case "ping":
+                                await websocket.send_json(
+                                    {
+                                        "action": "pong",
+                                        "ts": datetime.datetime.now(
+                                            tz=datetime.timezone.utc
+                                        ).isoformat(),
+                                    }
+                                )
+                            case "del":
+                                if "topic" not in data:
+                                    await websocket.send_json(
+                                        {
+                                            "error": "Didn't get a topic for 'set' action. A topic must be provided."
+                                        }
+                                    )
+                                    continue
+                                del self.database[data["topic"]]
+
+                                if data["topic"] in self.subscriptions:
+                                    for client in self.subscriptions[data["topic"]]:
+                                        await client.websocket.send_json(
+                                            {
+                                                "action": "pub",
+                                                "topic": data["topic"],
+                                                "data": None,
+                                            }
+                                        )
+
+                                await websocket.send_json(
+                                    {
+                                        "action": "del",
+                                        "topic": data["topic"],
+                                        "ts": datetime.datetime.now(
+                                            tz=datetime.timezone.utc
+                                        ).isoformat(),
+                                    }
+                                )
+
+                                logger.debug(
+                                    f"{client_id} deleted topic: {data['topic']}"
+                                )
                             case "set":
                                 if "topic" not in data:
                                     await websocket.send_json(

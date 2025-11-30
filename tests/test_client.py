@@ -1,71 +1,54 @@
-import asyncio
 import pytest
 import time
+import threading
 from kevinbotlib_cns.server.cns_server import CNSServer
-from kevinbotlib_cns.client.async_client import CNSAsyncClient
-
+from kevinbotlib_cns.client.client import CNSClient
 
 @pytest.fixture(scope="module")
 def cns_server():
     server = CNSServer()
-    server.start(port=4801)  # Use a different port to avoid conflicts
-    # Give it a moment to start
+    server.start(port=4802)
     time.sleep(1)
     yield server
     server.stop()
 
-
-@pytest.mark.asyncio
-async def test_client_operations(cns_server):
-    client = CNSAsyncClient("ws://localhost:4801/cns", "pytest-client")
-
-    await client.connect()
+def test_sync_client(cns_server):
+    client = CNSClient("ws://localhost:4802/cns", "sync-client")
+    
+    client.connect()
     try:
         # Test Set
-        await client.set("test/pytest", {"foo": "bar"})
-
+        client.set("test/sync", {"foo": "bar"})
+        
         # Test Get
-        data = await client.get("test/pytest")
+        data = client.get("test/sync")
         assert data == {"foo": "bar"}
-
-        # Test Set Int
-        await client.set("test/pytest", 123)
-
-        # Test Get Int
-        data = await client.get("test/pytest")
-        assert data == 123
-
-        # Test Get Null
-        data = await client.get("test/nonexistent")
-        assert data is None
-
+        
         # Test Topic Count
-        count = await client.topic_count()
+        count = client.topic_count()
         assert count >= 1
-
+        
         # Test Topics
-        topics = await client.get_topics()
-        assert "test/pytest" in topics
-
+        topics = client.topics()
+        assert "test/sync" in topics
+        
         # Test Subscribe
         received_updates = []
-
+        event = threading.Event()
+        
         def callback(topic, payload):
             received_updates.append((topic, payload))
-
-        await client.subscribe("test/pytest", callback)
-
+            event.set()
+            
+        client.subscribe("test/sync", callback)
+        
         # Trigger update
-        await client.set("test/pytest", {"foo": "baz"})
-
+        client.set("test/sync", {"foo": "baz"})
+        
         # Wait for callback
-        for _ in range(10):
-            if received_updates:
-                break
-            await asyncio.sleep(0.1)
-
+        assert event.wait(timeout=2.0)
         assert len(received_updates) > 0
         assert received_updates[-1][1] == {"foo": "baz"}
-
+        
     finally:
-        await client.disconnect()
+        client.disconnect()

@@ -1,6 +1,12 @@
+import sys
 import time
 
+from loguru import logger
+
 from kevinbotlib_cns.server import CNSServer
+
+logger.remove()
+logger.add(sys.stderr, level="INFO") # DEBUG logs are intensive
 
 if __name__ == "__main__":
     server = CNSServer()
