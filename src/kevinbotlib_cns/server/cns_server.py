@@ -281,6 +281,10 @@ class CNSServer:
                     try:
                         data = orjson.loads(await websocket.receive_text())
 
+                        if not isinstance(data, dict):
+                            logger.warning(f"Client {client_id} sent invalid data type: {type(data)}")
+                            continue
+
                         match data.get("action"):
                             case "ping":
                                 await websocket.send_json(

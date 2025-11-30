@@ -19,28 +19,28 @@ class CNSClient:
         self._async_client: Optional[CNSAsyncClient] = None
         self._connected = threading.Event()
 
+        self._async_client = CNSAsyncClient(self.url, self.client_id)
+        self._loop = asyncio.new_event_loop()
+        threading.Thread(target=self._loop.run_forever, daemon=True).start()
+
     def connect(self):
         """
         Attempt to connect to the KevinbotLib CNS server.
         :return:
         """
-        if self._thread and self._thread.is_alive():
-            return
-
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._run_loop, daemon=True)
-        self._thread.start()
-
-        future = asyncio.run_coroutine_threadsafe(self._connect_async(), self._loop)
-        future.result()
+        if not self._async_client:
+            raise ConnectionError("Failed to create async client")
+        
+        try:
+            future = asyncio.run_coroutine_threadsafe(self._async_client.connect(), self._loop)
+            future.result(timeout=0.1)  # Add timeout to prevent indefinite blocking
+        except Exception as e:
+            # Connection failed, but don't leave things in a bad state
+            raise ConnectionError(f"Failed to connect to CNS: {e}") from e
 
     def _run_loop(self):
         asyncio.set_event_loop(self._loop)
-        self._async_client = CNSAsyncClient(self.url, self.client_id)
         self._loop.run_forever()
-
-    async def _connect_async(self):
-        await self._async_client.connect()
 
     def disconnect(self):
         """
@@ -50,14 +50,13 @@ class CNSClient:
         if not self._loop:
             return
 
-        future = asyncio.run_coroutine_threadsafe(self._async_client.disconnect(), self._loop)
-        future.result()
+        if self._async_client:
+            try:
+                future = asyncio.run_coroutine_threadsafe(self._async_client.disconnect(), self._loop)
+                future.result(timeout=2.0)
+            except Exception:
+                pass  # Ignore errors during disconnect
         
-        self._loop.call_soon_threadsafe(self._loop.stop)
-        self._thread.join()
-        self._loop = None
-        self._thread = None
-        self._async_client = None
 
     def flushdb(self) -> str:
         """
@@ -67,6 +66,8 @@ class CNSClient:
 
         :return: Server-reported timestamp
         """
+        if not self._async_client or not self._loop:
+            raise ConnectionError("Not connected to CNS server")
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.flushdb(), self._loop
         )
@@ -77,10 +78,12 @@ class CNSClient:
         Ping the CNS server.
         :return: Seconds of (round-trip) latency
         """
+        if not self._async_client or not self._loop:
+            return None
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.ping(), self._loop
         )
-        return future.result()
+        return future.result(timeout=2)
 
     def delete(self, topic: str) -> str:
         """
@@ -88,10 +91,12 @@ class CNSClient:
         :param topic: Topic to delete.
         :return: Server-reported timestamp
         """
+        if not self._async_client or not self._loop:
+            raise ConnectionError("Not connected to CNS server")
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.delete(topic), self._loop
         )
-        return future.result()
+        return future.result(timeout=2)
 
     def set(self, topic: str, data: JSONType) -> str:
         """
@@ -100,10 +105,12 @@ class CNSClient:
         :param data: Data to set.
         :return: Server-reported timestamp
         """
+        if not self._async_client or not self._loop:
+            raise ConnectionError("Not connected to CNS server")
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.set(topic, data), self._loop
         )
-        return future.result()
+        return future.result(timeout=2)
 
     def get(self, topic: str) -> JSONType | None:
         """
@@ -111,10 +118,12 @@ class CNSClient:
         :param topic: Topic to get.
         :return: JSON-serializable data. Returns None if topic is not found, or if the data is null.
         """
+        if not self._async_client or not self._loop:
+            return None
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.get(topic), self._loop
         )
-        return future.result()
+        return future.result(timeout=2)
 
     def subscribe(self, topic: str, callback: Callable[[str, JSONType], None]) -> None:
         """
@@ -126,16 +135,20 @@ class CNSClient:
         :param callback: Callback to execute when a topic changes.
         :return:
         """
+        if not self._async_client or not self._loop:
+            raise ConnectionError("Not connected to CNS server")
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.subscribe(topic, callback), self._loop
         )
-        future.result()
+        future.result(timeout=2)
 
     def topic_count(self) -> int:
         """
         Get the number of topics on the CNS Server's database.
         :return: Topic count
         """
+        if not self._async_client or not self._loop:
+            return 0
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.topic_count(), self._loop
         )
@@ -146,6 +159,8 @@ class CNSClient:
         Get a list of topics in the CNS Server's database.
         :return: List of topics.
         """
+        if not self._async_client or not self._loop:
+            return []
         future = asyncio.run_coroutine_threadsafe(
             self._async_client.get_topics(), self._loop
         )
