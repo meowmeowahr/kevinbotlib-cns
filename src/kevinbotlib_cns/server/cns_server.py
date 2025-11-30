@@ -44,6 +44,7 @@ class CNSServer:
         self.clients: dict[uuid.UUID, ClientInfo] = {}
         self.subscriptions: dict[str, set[ClientInfo]] = {}
         self.database: dict[str, JSONType] = {}
+        self.topic_timeouts: dict[str, asyncio.Task] = {}
         self.start_time = datetime.datetime.now(datetime.timezone.utc)
         self.app: _FastAPI | None = None
 
@@ -122,6 +123,47 @@ class CNSServer:
         else:
             logger.error(f"Dashboard template not found at {template_path}")
             return None
+
+    def _cancel_topic_timeout(self, topic: str):
+        """Cancel any existing timeout for a topic."""
+        if topic in self.topic_timeouts:
+            self.topic_timeouts[topic].cancel()
+            del self.topic_timeouts[topic]
+            logger.debug(f"Cancelled timeout for topic: {topic}")
+
+    async def _schedule_topic_deletion(self, topic: str, timeout_ms: int):
+        """Schedule a topic to be deleted after the specified timeout."""
+        try:
+            # Convert milliseconds to seconds
+            timeout_seconds = timeout_ms / 1000.0
+            await asyncio.sleep(timeout_seconds)
+            
+            # Delete the topic from the database
+            if topic in self.database:
+                del self.database[topic]
+                logger.debug(f"Topic '{topic}' deleted after {timeout_ms}ms timeout")
+                
+                # Notify all subscribers that the topic was deleted
+                if topic in self.subscriptions:
+                    for client in self.subscriptions[topic]:
+                        try:
+                            await client.websocket.send_json(
+                                {
+                                    "action": "pub",
+                                    "topic": topic,
+                                    "data": None,
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to notify client {client.client_id} of topic deletion: {e}")
+            
+            # Remove the timeout task from tracking
+            if topic in self.topic_timeouts:
+                del self.topic_timeouts[topic]
+        except asyncio.CancelledError:
+            # Timeout was cancelled, which is expected behavior
+            logger.debug(f"Timeout cancelled for topic: {topic}")
+
 
     def _register_routes(self):
         @self.app.get("/", response_class=_HTMLResponse)
@@ -357,8 +399,25 @@ class CNSServer:
                                         }
                                     )
                                     continue
+                                
+                                # Cancel any existing timeout for this topic
+                                self._cancel_topic_timeout(data["topic"])
+                                
+                                # Set the data
                                 self.database[data["topic"]] = data["data"]
 
+                                # Schedule deletion if timeout is provided
+                                if "timeout" in data and data["timeout"] is not None:
+                                    timeout_ms = data["timeout"]
+                                    task = asyncio.create_task(
+                                        self._schedule_topic_deletion(data["topic"], timeout_ms)
+                                    )
+                                    self.topic_timeouts[data["topic"]] = task
+                                    logger.debug(
+                                        f"{client_id} set topic: {data['topic']} with {timeout_ms}ms timeout"
+                                    )
+
+                                # Notify subscribers
                                 if data["topic"] in self.subscriptions:
                                     for client in self.subscriptions[data["topic"]]:
                                         await client.websocket.send_json(
@@ -379,9 +438,10 @@ class CNSServer:
                                     }
                                 )
 
-                                logger.debug(
-                                    f"{client_id} set topic: {data['topic']} to {data['data']}"
-                                )
+                                if "timeout" not in data or data["timeout"] is None:
+                                    logger.debug(
+                                        f"{client_id} set topic: {data['topic']} to {data['data']}"
+                                    )
                             case "get":
                                 if "topic" not in data:
                                     await websocket.send_json(

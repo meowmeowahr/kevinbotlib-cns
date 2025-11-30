@@ -1,5 +1,6 @@
 import threading
 
+import pytest
 import requests
 
 import time
@@ -12,6 +13,7 @@ def test_server_start_stop():
     assert "KevinbotLibCNS.Server" in [t.name for t in threading.enumerate()]
     time.sleep(1)
     server.stop()
+    time.sleep(1)
     assert "KevinbotLibCNS.Server" not in [t.name for t in threading.enumerate()]
 
 def test_server_dashboard_navigate():
@@ -28,4 +30,5 @@ def test_server_dashboard_navigate():
     requests.get("http://127.0.0.1:4801/").raise_for_status()
 
     server.stop()
+    time.sleep(1)
     assert "KevinbotLibCNS.Server" not in [t.name for t in threading.enumerate()]

@@ -261,11 +261,12 @@ class CNSAsyncClient:
             self._pending_requests.pop(key, None)
             raise
 
-    async def set(self, topic: str, data: JSONType) -> str | None:
+    async def set(self, topic: str, data: JSONType, timeout: int | None = None) -> str | None:
         """
         Set the value of a CNS topic.
         :param topic: Topic to set.
         :param data: Data to set.
+        :param timeout: Millisecond expiration of the topic.
         :return: Server-reported timestamp. None if not connected.
         """
         if not self.websocket or not self._connected:
@@ -275,9 +276,24 @@ class CNSAsyncClient:
         key = f"set:{topic}"
         response_future = self._create_future(key)
         try:
-            await asyncio.wait_for(self.websocket.send(
-                orjson.dumps({"action": "set", "topic": topic, "data": data}).decode("utf-8")
-            ), self.timeout)
+            if timeout:
+                await asyncio.wait_for(
+                    self.websocket.send(
+                        orjson.dumps(
+                            {"action": "set", "topic": topic, "data": data, "timeout": timeout}
+                        ).decode("utf-8")
+                    ),
+                    self.timeout,
+                )
+            else:
+                await asyncio.wait_for(
+                    self.websocket.send(
+                        orjson.dumps(
+                            {"action": "set", "topic": topic, "data": data}
+                        ).decode("utf-8")
+                    ),
+                    self.timeout,
+                )
             return await asyncio.wait_for(response_future, timeout=5.0)
         except asyncio.TimeoutError:
             self._pending_requests.pop(key, None)
